@@ -1,51 +1,64 @@
 import os
+import re
+import gdown
 import subprocess
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 from dotenv import load_dotenv
 
-load_dotenv()  # Load variables from .env
+load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-async def convert_video_to_ac3(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    video = update.message.video or update.message.document
-    if not video:
-        await update.message.reply_text("Send a valid video file.")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Send me a Google Drive link to convert the video to AC3 audio.")
+
+def extract_drive_id(url):
+    match = re.search(r'/d/([a-zA-Z0-9_-]+)', url)
+    if not match:
+        match = re.search(r'id=([a-zA-Z0-9_-]+)', url)
+    return match.group(1) if match else None
+
+async def handle_drive_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    url = update.message.text.strip()
+    file_id = extract_drive_id(url)
+    if not file_id:
+        await update.message.reply_text("Invalid Google Drive link. Please make sure it contains a file ID.")
         return
 
-    await update.message.reply_text("Downloading video...")
-
-    file = await context.bot.get_file(video.file_id)
-    input_path = f"input_{file.file_unique_id}.mp4"
-    output_path = f"output_{file.file_unique_id}.mp4"
-
-    await file.download_to_drive(input_path)
-
-    await update.message.reply_text("Converting audio to AC3...")
-
-    ffmpeg_command = [
-        "ffmpeg", "-i", input_path,
-        "-c:v", "copy",
-        "-c:a", "ac3",
-        "-q:a", "0",
-        output_path
-    ]
+    download_url = f"https://drive.google.com/uc?id={file_id}"
+    input_path = "input_video.mp4"
+    output_path = "output_video_ac3.mp4"
 
     try:
-        subprocess.run(ffmpeg_command, check=True)
-        await update.message.reply_text("Uploading converted video...")
-        await update.message.reply_video(video=open(output_path, "rb"))
-    except subprocess.CalledProcessError as e:
-        await update.message.reply_text(f"Conversion failed: {e}")
+        gdown.download(download_url, input_path, quiet=False)
+
+        # Extract original bitrate
+        probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0",
+                                "-show_entries", "stream=bit_rate",
+                                "-of", "default=noprint_wrappers=1:nokey=1", input_path],
+                                capture_output=True, text=True)
+        bitrate = probe.stdout.strip() or "192000"
+
+        # Convert video audio to AC3
+        subprocess.run([
+            "ffmpeg", "-i", input_path,
+            "-c:v", "copy", "-c:a", "ac3", "-b:a", f"{bitrate}", output_path
+        ], check=True)
+
+        await update.message.reply_document(document=open(output_path, "rb"))
+
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
+
     finally:
-        if os.path.exists(input_path):
-            os.remove(input_path)
-        if os.path.exists(output_path):
-            os.remove(output_path)
+        for f in [input_path, output_path]:
+            if os.path.exists(f):
+                os.remove(f)
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
-app.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, convert_video_to_ac3))
+app.add_handler(CommandHandler("start", start))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_drive_link))
 
-print("🤖 Bot is running...")
-app.run_polling()
+if __name__ == "__main__":
+    app.run_polling()
