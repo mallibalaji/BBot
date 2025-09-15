@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin • Lemon Pickles</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="styles.css" rel="stylesheet">
+</head>
+<body onload="initAdmin()">
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+  <div class="container">
+    <a class="navbar-brand" href="index.html">Lemon Pickles Admin</a>
+  </div>
+</nav>
+
+<main class="container py-4">
+  <!-- Login -->
+  <section id="loginSection" class="d-none">
+    <div class="row justify-content-center">
+      <div class="col-md-5">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title mb-3">Admin Login</h5>
+            <div class="mb-3">
+              <label class="form-label">Username</label>
+              <input id="loginUser" type="text" class="form-control" placeholder="admin">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Password</label>
+              <input id="loginPass" type="password" class="form-control" placeholder="lemon123">
+            </div>
+            <button class="btn btn-primary w-100" onclick="handleLogin()">Login</button>
+            <p class="text-muted small mt-3 mb-0">Demo-only client-side auth stored in localStorage.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Dashboard -->
+  <section id="adminSection" class="d-none">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2 class="h5 mb-0">Products</h2>
+      <div class="d-flex gap-2">
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#productModal" onclick="openCreate()">Add Product</button>
+        <button class="btn btn-outline-secondary" onclick="logout()">Logout</button>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>Image</th>
+            <th>Name</th>
+            <th class="text-end">Price (₹)</th>
+            <th>Availability</th>
+            <th>Description</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- Modal -->
+<div class="modal fade" id="productModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 id="modalTitle" class="modal-title">Add Product</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="prodId">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Name</label>
+            <input id="prodName" class="form-control" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Price (₹)</label>
+            <input id="prodPrice" type="number" min="0" class="form-control" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Availability</label>
+            <select id="prodAvail" class="form-select">
+              <option value="true">In stock</option>
+              <option value="false">Unavailable</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Image URL</label>
+            <input id="prodImg" class="form-control" placeholder="https://...">
+            <div class="form-text">Paste a direct image URL, or use a base64 data URL.</div>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Description</label>
+            <textarea id="prodDesc" class="form-control" rows="3"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button id="saveBtn" class="btn btn-primary" onclick="saveProduct()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="bg-dark text-light py-4 mt-auto">
+  <div class="container">
+    <div class="row g-3">
+      <div class="col-md">
+        <h5 class="mb-2">Contact</h5>
+        <p class="mb-1">Owner: Lemon Delights</p>
+        <p class="mb-1">Phone: +91-98765-43210</p>
+        <p class="mb-0">Email: hello@lemondelights.in</p>
+      </div>
+      <div class="col-md">
+        <h5 class="mb-2">Address</h5>
+        <p class="mb-0">12 Citrus Street, Pune, Maharashtra 411001</p>
+      </div>
+      <div class="col-md text-md-end">
+        <p class="mb-0">© 2025 Lemon Delights</p>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="app.js"></script>
+<script>
+const SESSION_KEY = 'lp_session';
+
+function initAdmin() {
+  LemonStore.initDefaults();
+  const session = localStorage.getItem(SESSION_KEY);
+  toggleSections(!!session);
+  if (session) renderTable();
+}
+
+function toggleSections(isAuthed) {
+  document.getElementById('loginSection').classList.toggle('d-none', isAuthed);
+  document.getElementById('adminSection').classList.toggle('d-none', !isAuthed);
+}
+
+function handleLogin() {
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value.trim();
+  if (LemonStore.verifyLogin(u, p)) {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ user: u, ts: Date.now() }));
+    toggleSections(true);
+    renderTable();
+  } else {
+    alert('Invalid credentials');
+  }
+}
+
+function logout() {
+  localStorage.removeItem(SESSION_KEY);
+  toggleSections(false);
+}
+
+function renderTable() {
+  const rows = document.getElementById('rows');
+  const products = LemonStore.getProducts();
+  rows.innerHTML = products.map(p => `
+    <tr>
+      <td><img src="${p.image}" alt="${p.name}" class="rounded" style="width:70px;height:46px;object-fit:cover"></td>
+      <td>${p.name}</td>
+      <td class="text-end">${p.price}</td>
+      <td>${p.available ? 'In stock' : 'Unavailable'}</td>
+      <td class="text-truncate" style="max-width:260px">${p.description}</td>
+      <td class="text-end">
+        <button class="btn btn-sm btn-outline-primary me-2" data-bs-toggle="modal" data-bs-target="#productModal" onclick="openEdit('${p.id}')">Edit</button>
+        <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete('${p.id}')">Delete</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openCreate() {
+  document.getElementById('modalTitle').textContent = 'Add Product';
+  document.getElementById('prodId').value = '';
+  document.getElementById('prodName').value = '';
+  document.getElementById('prodPrice').value = '';
+  document.getElementById('prodAvail').value = 'true';
+  document.getElementById('prodImg').value = '';
+  document.getElementById('prodDesc').value = '';
+}
+
+function openEdit(id) {
+  const p = LemonStore.getProducts().find(x => x.id === id);
+  document.getElementById('modalTitle').textContent = 'Edit Product';
+  document.getElementById('prodId').value = p.id;
+  document.getElementById('prodName').value = p.name;
+  document.getElementById('prodPrice').value = p.price;
+  document.getElementById('prodAvail').value = String(!!p.available);
+  document.getElementById('prodImg').value = p.image;
+  document.getElementById('prodDesc').value = p.description;
+}
+
+function saveProduct() {
+  const id = document.getElementById('prodId').value;
+  const payload = {
+    name: document.getElementById('prodName').value.trim(),
+    price: Number(document.getElementById('prodPrice').value),
+    available: document.getElementById('prodAvail').value === 'true',
+    image: document.getElementById('prodImg').value.trim() || 'https://picsum.photos/seed/lemonx/600/400',
+    description: document.getElementById('prodDesc').value.trim()
+  };
+  if (!payload.name || isNaN(payload.price)) {
+    alert('Please enter valid name and price.');
+    return;
+  }
+  if (id) {
+    LemonStore.updateProduct(id, payload);
+  } else {
+    LemonStore.addProduct(payload);
+  }
+  bootstrap.Modal.getInstance(document.getElementById('productModal')).hide();
+  renderTable();
+}
+
+function confirmDelete(id) {
+  if (confirm('Delete this product?')) {
+    LemonStore.deleteProduct(id);
+    renderTable();
+  }
+}
+</script>
+</body>
+</html>
